@@ -1,49 +1,49 @@
-# Gmail Forward Agent — Final Version
+# Gmail Forward Agent — Smooth Version
 
-## How it works
+## The experience
 
-1. **You** open the website, fill in source email, destination email, and
-   filter criteria, and click "Generate link."
-2. You get a link back. **Copy and send it** (WhatsApp, chat, however) to
-   whoever owns the source Gmail account.
-3. **They** open that link on their own computer. It shows the filter
-   details and a "Download & Run" button.
-4. They click it — this downloads a small `forward-agent.js` script with
-   their exact details already filled in.
-5. They run it with `node forward-agent.js` on their own machine.
-6. This opens a **real, separate Chrome browser window** — not inside any
-   website — on Google's actual sign-in page, with their email pre-filled.
-7. They type their own password directly into that real Google page. The
-   script waits indefinitely — there's no time limit.
-8. Once logged in, it automatically creates the Gmail filter and turns on
-   forwarding to the destination address, entirely on their own computer.
+1. You fill the form → click "Generate link" → get a link, no email sent.
+2. You send that link to the source account owner (WhatsApp, etc.).
+3. They open it — one page, no download, no terminal. They see the filter
+   summary and a "Confirm and sign in" button.
+4. Clicking it shows a **live view of Google's real sign-in page**,
+   streamed right there in their browser tab. They type their password
+   directly into it.
+5. Once logged in, the agent automatically finishes the rest — creating
+   the filter, enabling forwarding.
 
-The web server never touches anyone's password — its only job is storing
-the filter details and generating that personalized script file.
+No installs, no npm, no terminal for the second user — everything happens
+in that one browser tab.
 
----
+## The trade-off (read this)
 
-## Part 1 — deploy the website
+This runs the actual browser **on your server**, not on the second user's
+computer. That's what makes it smooth (no downloads) but it does mean:
+
+- It's a **live streamed view**, not a literal separate native Chrome
+  window popping up on their desktop. Functionally identical for typing
+  a password safely (it's still Google's real page, their real password,
+  never seen by this server) — just visually it's inside a browser tab
+  instead of its own window.
+- Your server needs to stay running and needs enough memory per
+  concurrent session (~150-300MB each) — same requirement as before.
+
+If a literal separate native window matters more than a zero-install
+experience, use the `gmail-forward-final` version instead (downloads a
+script the second user runs locally). You can't fully have both at once —
+that's a real browser-security boundary, not a missing feature.
+
+## Setup
 
 ```bash
 npm install
+npx playwright install chromium
 npm start
 ```
 
-Deploy the same way as before: push to GitHub, connect to Render/Railway,
-build command `npm install`, start command `npm start`. No environment
-variables are required this time — no SMTP, no Playwright on the server
-itself (the server only writes a text file, it doesn't run a browser).
+## Deploying
 
-### Files for this part
-
-- `server.js`
-- `package.json`
-- `public/index.html`
-- `public/confirm.html`
-
-Folder structure to push to GitHub:
-
+Push these 4 files to GitHub:
 ```
 your-repo/
 ├── server.js
@@ -52,36 +52,5 @@ your-repo/
     ├── index.html
     └── confirm.html
 ```
-
----
-
-## Part 2 — what the second user does (on their own computer)
-
-1. Open the link you sent them.
-2. Click **Download & Run** — saves `forward-agent.js`.
-3. Open a terminal in the folder it downloaded to.
-4. Run once:
-   ```bash
-   npm install playwright
-   npx playwright install chromium
-   ```
-5. Run the script:
-   ```bash
-   node forward-agent.js
-   ```
-6. A real Chrome window opens with their email already filled in. They
-   type their own password into it and complete any 2FA.
-7. Everything else — adding the forwarding address, confirming the code
-   Google sends, creating the filter, enabling forwarding — happens
-   automatically after that.
-
-## Notes
-
-- Google will still require a one-time confirmation code sent to the
-  destination address before forwarding can be enabled — this is a Google
-  security requirement, not something this tool can or should skip.
-- Gmail's settings page HTML changes periodically. If a step fails
-  partway, the browser window stays open so the last step can be finished
-  by hand.
-- Each link is single-use in spirit — the server keeps the request in
-  memory, so restarting the server clears all pending links.
+Connect to Render → build command `npm install` → start command
+`npm start`. No environment variables required.

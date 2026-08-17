@@ -1,13 +1,16 @@
 {
-  "name": "gmail-forward-agent-final",
+  "name": "gmail-forward-smooth",
   "version": "1.0.0",
-  "description": "Web app that generates a link + personalized local automation script for Gmail forwarding",
+  "description": "Link-based Gmail forwarding automation with live in-browser streaming — no email, no downloads, no terminal for the second user",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx playwright install chromium"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "ws": "^8.18.0",
+    "playwright": "^1.47.0"
   },
   "engines": { "node": ">=18.0.0" }
 }
