@@ -1,62 +1,87 @@
-# Gmail Forward Agent v2
+# Gmail Forward Agent — Final Version
 
-## What changed from v1
+## How it works
 
-1. **Full filter set restored** — From, To, Subject, Has the words, Doesn't
-   have, Size (greater/less than + MB/KB), Date within, Search scope, Has
-   attachment, Don't include chats.
-2. **Real two-device flow**:
-   - The requester fills the form on `index.html` and clicks "Send
-     confirmation request." That's all that happens on their device.
-   - A real email is sent (via SMTP/Nodemailer) to the destination address
-     with a summary and a confirm link.
-   - The **destination user opens that link on their own device** —
-     that loads `confirm.html`, which is the only place the live
-     Google login stream appears. They type their password there,
-     on their own screen.
-   - The requester's page just polls for status and shows "waiting" until
-     the recipient finishes.
+1. **You** open the website, fill in source email, destination email, and
+   filter criteria, and click "Generate link."
+2. You get a link back. **Copy and send it** (WhatsApp, chat, however) to
+   whoever owns the source Gmail account.
+3. **They** open that link on their own computer. It shows the filter
+   details and a "Download & Run" button.
+4. They click it — this downloads a small `forward-agent.js` script with
+   their exact details already filled in.
+5. They run it with `node forward-agent.js` on their own machine.
+6. This opens a **real, separate Chrome browser window** — not inside any
+   website — on Google's actual sign-in page, with their email pre-filled.
+7. They type their own password directly into that real Google page. The
+   script waits indefinitely — there's no time limit.
+8. Once logged in, it automatically creates the Gmail filter and turns on
+   forwarding to the destination address, entirely on their own computer.
 
-## Environment variables (required)
+The web server never touches anyone's password — its only job is storing
+the filter details and generating that personalized script file.
 
-Set these on your hosting platform:
+---
 
-```
-SMTP_HOST=smtp.yourprovider.com
-SMTP_PORT=587
-SMTP_USER=your-smtp-username
-SMTP_PASS=your-smtp-password
-SMTP_FROM=no-reply@yourdomain.com
-APP_URL=https://your-deployed-domain.com
-```
-
-Any SMTP provider works — Gmail SMTP (with an app password), SendGrid,
-Resend's SMTP relay, Mailgun, etc. `APP_URL` must be your real deployed
-domain so the confirm link in the email works.
-
-## Local setup
+## Part 1 — deploy the website
 
 ```bash
 npm install
-npx playwright install chromium
 npm start
 ```
 
-Set the env vars above in a `.env` file or your shell before running, or
-the email step will fail (everything else still works up to that point).
+Deploy the same way as before: push to GitHub, connect to Render/Railway,
+build command `npm install`, start command `npm start`. No environment
+variables are required this time — no SMTP, no Playwright on the server
+itself (the server only writes a text file, it doesn't run a browser).
 
-## Files
+### Files for this part
 
-- `server.js` — request creation, email sending, WebSocket streaming, Gmail
-  automation
-- `public/index.html` — requester's form (no browser session ever opens
-  here)
-- `public/confirm.html` — destination user's confirmation + live login page
-  (opened only via the emailed link)
-- `package.json` — dependencies including `nodemailer`
+- `server.js`
+- `package.json`
+- `public/index.html`
+- `public/confirm.html`
 
-## Deploying
+Folder structure to push to GitHub:
 
-Same as before — Render/Railway/Fly.io/VPS, since it needs a persistent
-Node server (not static/serverless hosting). See the original deployment
-notes: build command `npm install`, start command `npm start`.
+```
+your-repo/
+├── server.js
+├── package.json
+└── public/
+    ├── index.html
+    └── confirm.html
+```
+
+---
+
+## Part 2 — what the second user does (on their own computer)
+
+1. Open the link you sent them.
+2. Click **Download & Run** — saves `forward-agent.js`.
+3. Open a terminal in the folder it downloaded to.
+4. Run once:
+   ```bash
+   npm install playwright
+   npx playwright install chromium
+   ```
+5. Run the script:
+   ```bash
+   node forward-agent.js
+   ```
+6. A real Chrome window opens with their email already filled in. They
+   type their own password into it and complete any 2FA.
+7. Everything else — adding the forwarding address, confirming the code
+   Google sends, creating the filter, enabling forwarding — happens
+   automatically after that.
+
+## Notes
+
+- Google will still require a one-time confirmation code sent to the
+  destination address before forwarding can be enabled — this is a Google
+  security requirement, not something this tool can or should skip.
+- Gmail's settings page HTML changes periodically. If a step fails
+  partway, the browser window stays open so the last step can be finished
+  by hand.
+- Each link is single-use in spirit — the server keeps the request in
+  memory, so restarting the server clears all pending links.
