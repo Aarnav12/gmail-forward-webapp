@@ -13,6 +13,11 @@
  *    on forwarding.
  */
 
+// Must match the postinstall script's PLAYWRIGHT_BROWSERS_PATH so the
+// browser installed at build time is found at runtime (fixes Render's
+// build/runtime filesystem mismatch).
+process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+
 const express = require('express');
 const http = require('http');
 const { WebSocketServer } = require('ws');
